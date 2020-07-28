@@ -54,8 +54,8 @@ int main()
     g2o::make_unique<BlockSolverX>(g2o::make_unique<LinearSolverDense<g2o::BlockSolverX::PoseMatrixType>>()));
 
   optimizer.setAlgorithm(solver);
-  //构造数据
-  vector<Vector3d> true_points;//世界坐标系
+  
+  vector<Vector3d> true_points;
   for (size_t i=0;i<1000; ++i)
   {
     true_points.push_back(Vector3d((g2o::Sampler::uniformRand(0., 1.)-0.5)*3,
@@ -80,8 +80,9 @@ int main()
     // set up node
     // VertexSE3 *vc = new VertexSE3();
     // vc->setEstimate(cam);
-    VertexSE3Expmap * vc = new VertexSE3Expmap();//新顶点
-    vc->setEstimate(toSE3Quat(cam));//注意位姿格式
+    // different NODE CLASS
+    VertexSE3Expmap * vc = new VertexSE3Expmap();
+    vc->setEstimate(toSE3Quat(cam));//!Isometry3D --> se3quat 
 
     vc->setId(vertex_id);      // vertex id
 
@@ -116,7 +117,7 @@ int main()
     Vector3d pt0,pt1;
     // pt0 = vp0->estimate().inverse() * true_points[i];
     // pt1 = vp1->estimate().inverse() * true_points[i];
-    //注意先把se3qunt变为Isometry3D
+    //!se3quat --> Isometry3D
     Eigen::Isometry3d Tw0 = SE3Quat2Isometry(vp0->estimate());
     Eigen::Isometry3d Tw1 = SE3Quat2Isometry(vp1->estimate());
     pt0 = Tw0.inverse() * true_points[i];
@@ -172,25 +173,26 @@ int main()
   // Eigen::Isometry3d cam = vc->estimate();
   VertexSE3Expmap* vc = 
     dynamic_cast<VertexSE3Expmap*>(optimizer.vertices().find(1)->second);
-  Eigen::Isometry3d cam = SE3Quat2Isometry(vc->estimate());//Tw1
-  cam.translation() = Vector3d(0,0,0.2);//0,0,0.2 0,0,0.5 0,0,0  0.2,0,-0.2  0.2,0.2,1
+  Eigen::Isometry3d cam = SE3Quat2Isometry(vc->estimate());//!se3quat --> Isometry3D
+  cam.translation() = Vector3d(0,0,0.2);
   // vc->setEstimate(cam);
-  vc->setEstimate(toSE3Quat(cam));
+  vc->setEstimate(toSE3Quat(cam)); //!Isometry3D --> se3quat 
 
   bool init = optimizer.initializeOptimization();
   if (!init)
   {
     cout << "Optimize INIT Fail!" << endl;
   }
-  optimizer.computeActiveErrors();//因为要用到chi2 必须调用该函数
-  cout << "[VertexSE3Expmap] GICPEdge" << endl;//VertexSE3Expmap
+  optimizer.computeActiveErrors();
+  //print
+  cout << "[VertexSE3Expmap] GICPEdge" << endl;//!use new Vertex Class in Edge_V_V_GICP
   cout << "Initial Second vertex = " << cam.translation().transpose() << endl;
   cout << "Initial chi2 = " << FIXED(optimizer.chi2()) << endl;
 
   optimizer.setVerbose(true);
 
   int ite = 10;
-  int optIt = optimizer.optimize(ite);//
+  int optIt = optimizer.optimize(ite);
   if (optIt == 0)
   {
     cout << "OptimizationAlgorithm::Fail !" << endl;
@@ -206,7 +208,7 @@ int main()
     dynamic_cast<VertexSE3Expmap*>(optimizer.vertices().find(0)->second);
   VertexSE3Expmap* vp1 = 
     dynamic_cast<VertexSE3Expmap*>(optimizer.vertices().find(1)->second);
-  
+  //!se3quat --> Isometry3D
   cout <<  SE3Quat2Isometry(vp0->estimate()).translation().transpose() << endl;
   cout <<  SE3Quat2Isometry(vp1->estimate()).translation().transpose() << endl;
 
