@@ -88,7 +88,7 @@ namespace g2o {
   }
 
   // Copy constructor
-  Edge_V_V_GICP::Edge_V_V_GICP(const Edge_V_V_GICP* e)
+  Edge_V_V_GICP::Edge_V_V_GICP(const Edge_V_V_GICP* e) //! use new vertex class: VertexSE3Expmap
     : BaseBinaryEdge<3, EdgeGICP, VertexSE3Expmap, VertexSE3Expmap>()
   {
 
@@ -168,9 +168,8 @@ namespace g2o {
 
   // jacobian defined as:
   //    f(T0,T1) =  dR0.inv() * T0.inv() * (T1 * dR1 * p1 + dt1) - dt0
-  //从上面这个定义，看出vp0是右扰动(右->左)，vp1是右扰动吧
   //    df/dx0 = [-I, d[dR0.inv()]/dq0 * T01 * p1]
-  //    df/dx1 = [R0, T01 * d[dR1]/dq1 * p1] 这和它代码也不对应啊 迷惑
+  //    df/dx1 = [R0, T01 * d[dR1]/dq1 * p1] 
   void Edge_V_V_GICP::linearizeOplus()
   {
     // VertexSE3* vp0 = static_cast<VertexSE3*>(_vertices[0]);
@@ -180,37 +179,34 @@ namespace g2o {
 
     // topLeftCorner<3,3>() is the rotation matrix
     // Matrix3 R0T = vp0->estimate().matrix().topLeftCorner<3,3>().transpose();//R0w
-    Eigen::Isometry3d Tw0 = SE3Quat2Isometry(vp0->estimate());
+    Eigen::Isometry3d Tw0 = SE3Quat2Isometry(vp0->estimate());//!se3quat-->Isometry3d
     Eigen::Isometry3d Tw1 = SE3Quat2Isometry(vp1->estimate());
     Eigen::Matrix3d R0T = Tw0.matrix().topLeftCorner<3,3>().transpose();//R0w
     Vector3 p1 = measurement().pos1;
-    // Isometry3 Tw1 = vp1->estimate();
-    Vector3 p1tw = Tw1 * p1;//p1tw
+    Vector3 p1tw = Tw1 * p1;//p1atw
 
-    //vertexse3 是右乘更新 故需要右导数
-    //VertexSE3Expmap是左乘更新 对应左导数！
+    //(VertexSE3 : Right multiplication update , so use the Right perturbation model to calculate the Jacobians)
+    //! VertexSE3Expmap: Left multiplication to update itself, so here I use the Left perturbation model to calculate the Jacobians !
     // this could be more efficient
     if (!vp0->fixed())
-      {//对变换的逆的导数 需要加个负号？ g2o/types/slam3d/edge_se3_lotsofxyz.cpp里也是一样的
-        //右->左扰动
-        // Isometry3 T01 = vp0->estimate().inverse() *  vp1->estimate();
+      {
+        //Right perturbation
         // Vector3 p1t0 = Tw0.inverse() * p1tw;//p1t0
         // _jacobianOplusXi.block<3,3>(0,0) = -Matrix3::Identity();
-        // _jacobianOplusXi.block<3,1>(0,3) = dRidx*p1t0;//取负等价于转置
+        // _jacobianOplusXi.block<3,1>(0,3) = dRidx*p1t0;
         // _jacobianOplusXi.block<3,1>(0,4) = dRidy*p1t0;
         // _jacobianOplusXi.block<3,1>(0,5) = dRidz*p1t0;
 
-        //另一种扰动 左->右
+        //Left perturbation
         _jacobianOplusXi.block<3,3>(0,0) = -R0T;//-R0w
-        _jacobianOplusXi.block<3,1>(0,3) = R0T*dRidx*p1tw;//取负等价于转置
+        _jacobianOplusXi.block<3,1>(0,3) = R0T*dRidx*p1tw;
         _jacobianOplusXi.block<3,1>(0,4) = R0T*dRidy*p1tw;
         _jacobianOplusXi.block<3,1>(0,5) = R0T*dRidz*p1tw;
       }
-    //好像0左1右收敛更快 更好 （0.2 0.2 1）15次
+    
     if (!vp1->fixed())
       {
-        //右扰动
-        // // Matrix3 R1 = vp1->estimate().matrix().topLeftCorner<3,3>();
+        //Right perturbation
         // Matrix3 R1 = Tw1.matrix().topLeftCorner<3,3>();//Rw1
         // Matrix3 R01 = R0T*R1;//R01=R0w*Rw1
         // _jacobianOplusXj.block<3,3>(0,0) = R01;
@@ -218,7 +214,7 @@ namespace g2o {
         // _jacobianOplusXj.block<3,1>(0,4) = R01*dRidy.transpose()*p1;
         // _jacobianOplusXj.block<3,1>(0,5) = R01*dRidz.transpose()*p1;
 
-        //左扰动
+        //Left perturbation
         _jacobianOplusXj.block<3,3>(0,0) = R0T;//R0w
         _jacobianOplusXj.block<3,1>(0,3) = R0T*dRidx.transpose()*p1tw;
         _jacobianOplusXj.block<3,1>(0,4) = R0T*dRidy.transpose()*p1tw;
