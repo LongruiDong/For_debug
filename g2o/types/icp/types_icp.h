@@ -27,7 +27,7 @@
 #ifndef G2O_TYPES_ICP
 #define G2O_TYPES_ICP
 
-#define GICP_ANALYTIC_JACOBIANS //测试不用解析式的雅可比
+#define GICP_ANALYTIC_JACOBIANS //whether to use Jacobians
 //#define SCAM_ANALYTIC_JACOBIANS
 
 #include "g2o/core/base_vertex.h"
@@ -36,22 +36,22 @@
 #include "g2o/types/sba/types_sba.h"
 #include "g2o/types/slam3d/types_slam3d.h"
 #include "g2o_types_icp_api.h"
-#include "g2o/types/sba/types_six_dof_expmap.h"//使用新顶点
+#include "g2o/types/sba/types_six_dof_expmap.h"//!to use VertexSE3Expmap
 
 #include <Eigen/Geometry>
 #include <iostream>
 using namespace std;
 
-//格式转换
+//Transform between se3quat and Isometry3d
 Eigen::Isometry3d SE3Quat2Isometry(const g2o::SE3Quat &SE3)
 {
     Eigen::Matrix<double,4,4> eigMat = SE3.to_homogeneous_matrix();
     Eigen::Isometry3d T = Eigen::Isometry3d::Identity();
-    //设置平移部分
+    
     Eigen::Vector3d tv(eigMat(0,3), eigMat(1,3), eigMat(2,3));
     T.pretranslate(tv);
-    //设置旋转部分
-    Eigen::Matrix3d Rot;//旋转矩阵
+    
+    Eigen::Matrix3d Rot;
     Rot << eigMat(0,0), eigMat(0,1), eigMat(0,2),
           eigMat(1,0), eigMat(1,1), eigMat(1,2),
           eigMat(2,0), eigMat(2,1), eigMat(2,2);
@@ -188,7 +188,7 @@ namespace g2o {
   // 3D rigid constraint
   //    3 values for position wrt frame
   //    3 values for normal wrt frame, not used here
-  // first two args are the measurement type, second two the connection classes //VertexSE3Expmap
+  // first two args are the measurement type, second two the connection classes //!to use new vertex class: VertexSE3Expmap
   class G2O_TYPES_ICP_API Edge_V_V_GICP : public  BaseBinaryEdge<3, EdgeGICP, VertexSE3Expmap, VertexSE3Expmap>
   {
   public:
@@ -233,7 +233,7 @@ namespace g2o {
         {
           // p1 = vp1->estimate() * measurement().pos1;
           // p1 = vp0->estimate().inverse() * p1;
-
+	  // !se3quat-->Isometry3d
           Eigen::Isometry3d Tw0 = SE3Quat2Isometry(vp0->estimate());
           Eigen::Isometry3d Tw1 = SE3Quat2Isometry(vp1->estimate());
           p1 = Tw1 * measurement().pos1;
@@ -261,7 +261,7 @@ namespace g2o {
       // re-define the information matrix
       // topLeftCorner<3,3>() is the rotation()
       // const Matrix3 transform = ( vp0->estimate().inverse() *  vp1->estimate() ).matrix().topLeftCorner<3,3>();
-      const Matrix3 transform = ( SE3Quat2Isometry(vp0->estimate()).inverse() *  vp1->estimate() ).matrix().topLeftCorner<3,3>();
+      const Matrix3 transform = ( SE3Quat2Isometry(vp0->estimate()).inverse() *  vp1->estimate() ).matrix().topLeftCorner<3,3>();// !se3quat-->Isometry3d
       information() = ( cov0 + transform * cov1 * transform.transpose() ).inverse();
 
     }
